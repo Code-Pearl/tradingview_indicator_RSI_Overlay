@@ -1,0 +1,152 @@
+//@version=6
+// 
+// ▄▄▄▄▄▄▄   ▄▄▄▄▄   ▄▄▄▄▄▄    ▄▄▄▄▄▄▄                ▄▄▄▄▄▄▄    ▄▄▄▄▄▄▄   ▄▄▄▄   ▄▄▄▄▄▄▄   ▄▄▄    
+//███▀▀▀▀▀ ▄███████▄ ███▀▀██▄ ███▀▀▀▀▀                ███▀▀███▄ ███▀▀▀▀▀ ▄██▀▀██▄ ███▀▀███▄ ███    
+//███      ███   ███ ███  ███ ███▄▄                   ███▄▄███▀ ███▄▄    ███  ███ ███▄▄███▀ ███    
+//███      ███▄▄▄███ ███  ███ ███                     ███▀▀▀▀   ███      ███▀▀███ ███▀▀██▄  ███    
+//▀███████  ▀█████▀  ██████▀  ▀███████                ███       ▀███████ ███  ███ ███  ▀███ ████████
+//                                    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                                             
+
+indicator("Adaptive RSI Overlay", overlay=true)
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+
+colorbar   = input.bool(false, "Color Bars")
+length     = input.int(14, "Length", minval=1)
+upperLevel = input.float(70, "Upper Level")
+lowerLevel = input.float(30, "Lower Level")
+showEMA    = input.bool(true, "Show EMA")
+showFill   = input.bool(false, "Show Fill")
+
+// ============================================================================
+// WILDER RMA
+// ============================================================================
+
+alpha = 1.0 / length
+
+// Recursive Wilder-style moving average of price
+var float myEMA = na
+myEMA := na(myEMA[1]) ? close : alpha * close + (1.0 - alpha) * myEMA[1]
+
+// Wilder average of absolute price change
+absChange = math.abs(close - close[1])
+
+var float ccVol = na
+ccVol := na(ccVol[1]) ? absChange : alpha * absChange + (1.0 - alpha) * ccVol[1]
+
+// ============================================================================
+// NORMALIZATION
+// ============================================================================
+
+normalizationFactor = length - 1
+maxWidth = ccVol * normalizationFactor
+
+// ============================================================================
+// PRIMARY BANDS
+// ============================================================================
+
+upB   = myEMA + (upperLevel - 50.0) / 50.0 * maxWidth
+downB = myEMA - (50.0 - lowerLevel) / 50.0 * maxWidth
+
+// ============================================================================
+// INTERMEDIATE ZONES
+// ============================================================================
+
+uz1 = myEMA + (59.9 - 50.0) / 50.0 * maxWidth
+uz2 = myEMA + (63.5 - 50.0) / 50.0 * maxWidth
+
+dz1 = myEMA - (50.0 - 40.9) / 50.0 * maxWidth
+dz2 = myEMA - (50.0 - 36.5) / 50.0 * maxWidth
+
+// Additional zones from original
+uz3 = myEMA + (72.33 - 50.0) / 50.0 * maxWidth
+uz4 = myEMA + (76.58 - 50.0) / 50.0 * maxWidth
+
+dz3 = myEMA - (50.0 - 27.7) / 50.0 * maxWidth
+dz4 = myEMA - (50.0 - 23.4) / 50.0 * maxWidth
+
+// ============================================================================
+// FILLS
+// ============================================================================
+
+// Original Thinkorswim:
+// AddCloud(uz2, uz1, Color.LIGHT_GRAY, Color.LIGHT_GRAY)
+// AddCloud(dz1, dz2, Color.LIGHT_GRAY, Color.LIGHT_GRAY)
+
+upperFill1 = plot(showFill ? uz1 : na, "UZ1 Fill", color=color.new(color.gray, 100))
+upperFill2 = plot(showFill ? uz2 : na, "UZ2 Fill", color=color.new(color.gray, 100))
+
+lowerFill1 = plot(showFill ? dz1 : na, "DZ1 Fill", color=color.new(color.gray, 100))
+lowerFill2 = plot(showFill ? dz2 : na, "DZ2 Fill", color=color.new(color.gray, 100))
+
+fill(upperFill1, upperFill2, color=color.new(color.gray, 75))
+fill(lowerFill1, lowerFill2, color=color.new(color.gray, 75))
+
+// ============================================================================
+// ZONE LINES
+// ============================================================================
+
+plot(uz1, "UZ1", color=color.rgb(70, 70, 70), linewidth=1)
+plot(uz2, "UZ2", color=color.rgb(70, 70, 70), linewidth=1)
+
+plot(dz1, "DZ1", color=color.rgb(70, 70, 70), linewidth=1)
+plot(dz2, "DZ2", color=color.rgb(70, 70, 70), linewidth=1)
+
+// ============================================================================
+// EMA / CENTER LINE
+// ============================================================================
+
+plot(
+     showEMA ? myEMA : na,
+     "EMA",
+     color=color.yellow,
+     linewidth=3
+)
+
+// ============================================================================
+// PRIMARY UPPER / LOWER BANDS
+// ============================================================================
+
+plot(
+     upB,
+     "Upper",
+     color=color.red,  linewidth=2
+)
+
+plot(
+     downB,
+     "Lower",
+     color=color.aqua,
+     linewidth=2
+)
+
+// ============================================================================
+// BAR COLORING
+// ============================================================================
+
+bull = close > myEMA
+bear = close < myEMA
+
+barcolor(
+     colorbar ?
+         bull ? color.green :
+         bear ? color.red :
+         color.gray
+         : na
+)
+
+// ============================================================================
+// CROSS SIGNALS
+// ============================================================================
+
+crup = ta.crossover(close, myEMA)
+crdn = ta.crossunder(close, myEMA)
+
+// Optional visual markers
+// plotshape(crup, title="Cross Above", style=shape.triangleup,
+//      location=location.belowbar, color=color.green, size=size.tiny)
+//
+// plotshape(crdn, title="Cross Below", style=shape.triangledown,
+//      location=location.abovebar, color=color.red, size=size.tiny)
